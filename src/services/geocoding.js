@@ -2,23 +2,41 @@ import { PHOTON_URL } from '../config.js';
 
 const SERVICE_ERROR = '주소 검색 서비스를 사용할 수 없습니다.';
 
-function labelFor(properties = {}) {
-  const street = [properties.street, properties.housenumber].filter(Boolean).join(' ');
-  const parts = [properties.name, street, properties.district, properties.city].filter(Boolean);
-  return [...new Set(parts)].join(', ');
+function coordinateLabel(lat, lng) {
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+function labelFor(properties = {}, lat, lng) {
+  const safeProperties = properties && typeof properties === 'object' ? properties : {};
+  const street = [safeProperties.street, safeProperties.housenumber].filter(Boolean).join(' ');
+  const parts = [safeProperties.name, street, safeProperties.district, safeProperties.city].filter(Boolean);
+  return [...new Set(parts)].join(', ') || coordinateLabel(lat, lng);
 }
 
 function normalizeFeature(feature) {
-  const [lng, lat] = feature.geometry.coordinates;
-  return { label: labelFor(feature.properties), lat, lng };
+  const coordinates = feature?.geometry?.coordinates;
+  if (!Array.isArray(coordinates) || !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1])) {
+    return null;
+  }
+
+  const [lng, lat] = coordinates;
+  return { label: labelFor(feature.properties, lat, lng), lat, lng };
 }
 
 async function fetchJson(url, fetchImpl) {
-  const response = await fetchImpl(url);
-  if (!response.ok) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      throw new Error(SERVICE_ERROR);
+    }
+    const data = await response.json();
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error(SERVICE_ERROR);
+    }
+    return data;
+  } catch {
     throw new Error(SERVICE_ERROR);
   }
-  return response.json();
 }
 
 export async function searchPlaces(query, fetchImpl = fetch) {
@@ -30,7 +48,8 @@ export async function searchPlaces(query, fetchImpl = fetch) {
   url.searchParams.set('q', query.trim());
   url.searchParams.set('limit', '5');
   const data = await fetchJson(url, fetchImpl);
-  return (data.features ?? []).map(normalizeFeature);
+  const features = Array.isArray(data.features) ? data.features : [];
+  return features.map(normalizeFeature).filter(Boolean);
 }
 
 export async function reversePlace({ lat, lng }, fetchImpl = fetch) {
@@ -38,10 +57,7 @@ export async function reversePlace({ lat, lng }, fetchImpl = fetch) {
   url.searchParams.set('lat', lat);
   url.searchParams.set('lon', lng);
   const data = await fetchJson(url, fetchImpl);
-  const feature = data.features?.[0];
+  const feature = Array.isArray(data.features) ? normalizeFeature(data.features[0]) : null;
 
-  if (!feature) {
-    return { label: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng };
-  }
-  return normalizeFeature(feature);
+  return feature ?? { label: coordinateLabel(lat, lng), lat, lng };
 }
