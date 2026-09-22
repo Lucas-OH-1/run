@@ -6,6 +6,7 @@ const ROUTE_ERROR = '러닝 경로를 찾지 못했습니다. 지점을 조금 �
 
 export function createRoutingClient({ fetchImpl = fetch } = {}) {
   const profileIds = new Map();
+  const profilePromises = new Map();
 
   async function uploadProfile(mode) {
     try {
@@ -30,6 +31,26 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
     }
   }
 
+  function getProfile(mode) {
+    const profile = profileIds.get(mode);
+    if (profile) {
+      return Promise.resolve(profile);
+    }
+
+    const inFlight = profilePromises.get(mode);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const promise = uploadProfile(mode).finally(() => {
+      if (profilePromises.get(mode) === promise) {
+        profilePromises.delete(mode);
+      }
+    });
+    profilePromises.set(mode, promise);
+    return promise;
+  }
+
   function routeUrl(profile, start, end) {
     const url = new URL(BROUTER_URL);
     url.searchParams.set('lonlats', `${start.lng},${start.lat}|${end.lng},${end.lat}`);
@@ -40,7 +61,7 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
   }
 
   async function requestRoute(mode, start, end) {
-    let profile = profileIds.get(mode) || await uploadProfile(mode);
+    let profile = await getProfile(mode);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let response;
@@ -55,18 +76,27 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
           throw new Error(ROUTE_ERROR);
         }
         profileIds.delete(mode);
-        try {
-          profile = await uploadProfile(mode);
-        } catch {
-          throw new Error(ROUTE_ERROR);
-        }
+        profile = await getProfile(mode);
         continue;
       }
 
       try {
         const data = await response.json();
         const feature = data?.features?.[0];
-        if (!feature) {
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          Array.isArray(data) ||
+          !Array.isArray(data.features) ||
+          !feature ||
+          typeof feature !== 'object' ||
+          Array.isArray(feature) ||
+          feature.type !== 'Feature' ||
+          !feature.geometry ||
+          typeof feature.geometry !== 'object' ||
+          Array.isArray(feature.geometry) ||
+          !Array.isArray(feature.geometry.coordinates)
+        ) {
           throw new Error(ROUTE_ERROR);
         }
         return { mode, feature };
