@@ -167,6 +167,29 @@ describe('route search flow', () => {
     }
   });
 
+  it('새 지도 지점 선택 후 늦게 도착한 주소 검색 결과를 표시하지 않는다', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveSearch;
+      const geocoding = { searchPlaces: vi.fn(() => new Promise(resolve => { resolveSearch = resolve; })) };
+      const app = createApp({ document, geocoding, navigator: {} });
+      const input = document.querySelector('#start-input');
+
+      input.value = '주소 검색';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(350);
+      app.setPoint('start', { label: '현재 위치', lat: 37.5, lng: 127.1 });
+      resolveSearch([{ label: '오래된 검색 결과', lat: 37.4, lng: 127.0 }]);
+      await Promise.resolve();
+
+      expect(document.querySelector('#start-results').textContent).toBe('');
+      expect(input.value).toBe('현재 위치');
+      app.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('오래된 주소 검색 응답은 최신 검색 결과를 덮어쓰지 않는다', async () => {
     vi.useFakeTimers();
     try {

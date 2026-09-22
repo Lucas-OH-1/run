@@ -153,6 +153,8 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       input.value = normalized.label;
     }
 
+    ++searchGenerations[kind];
+    clearElement(kind === 'start' ? startResults : endResults);
     map?.setPoint?.(kind, normalized);
     updateReadyStatus();
     return normalized;
