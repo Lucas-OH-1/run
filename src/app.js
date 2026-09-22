@@ -93,6 +93,9 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   const pickStartButton = document.querySelector('#pick-start');
   const pickEndButton = document.querySelector('#pick-end');
   const fitRoutesButton = document.querySelector('#fit-routes');
+  const submitButton = form?.querySelector('button[type="submit"]');
+  const retryButton = document.querySelector('#retry');
+  const view = document.defaultView;
   const status = document.querySelector('#status');
   const routeList = document.querySelector('#route-list');
   const startResults = document.querySelector('#start-results');
@@ -126,8 +129,21 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     map?.setRoutes?.([]);
   }
 
+  function setRouteLoading(loading) {
+    if (submitButton) {
+      submitButton.disabled = loading;
+    }
+    if (loading && retryButton) {
+      retryButton.hidden = true;
+    }
+  }
+
   function invalidatePointSelection({ reverse = true } = {}) {
     routeGeneration += 1;
+    setRouteLoading(false);
+    if (retryButton) {
+      retryButton.hidden = true;
+    }
     if (reverse) {
       reverseGeneration += 1;
     }
@@ -225,13 +241,18 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       return;
     }
     if (!state.start || !state.end) {
+      setRouteLoading(false);
+      if (retryButton) {
+        retryButton.hidden = true;
+      }
       setText(status, '출발지와 도착지를 모두 선택해주세요.');
       return;
     }
 
     const start = state.start;
     const end = state.end;
-    setText(status, '경로를 검색하고 있습니다.');
+    setRouteLoading(true);
+    setText(status, '보행로를 분석해 러닝 경로를 찾고 있습니다…');
     try {
       const routes = await routing?.getRoutes?.(start, end);
       if (
@@ -244,6 +265,9 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       }
       if (!Array.isArray(routes) || routes.length === 0) {
         clearDisplayedRoutes();
+        if (retryButton) {
+          retryButton.hidden = false;
+        }
         setText(status, ROUTE_FAILURE_STATUS);
         return;
       }
@@ -251,8 +275,11 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       map?.setRoutes?.(state.routes);
       renderRoutes(state.routes);
       selectRoute(state.selectedMode);
+      if (retryButton) {
+        retryButton.hidden = true;
+      }
       setText(status, `${state.selectedMode} 경로를 추천합니다.`);
-    } catch {
+    } catch (error) {
       if (
         destroyed ||
         generation !== routeGeneration ||
@@ -262,7 +289,15 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
         return;
       }
       clearDisplayedRoutes();
-      setText(status, ROUTE_FAILURE_STATUS);
+      if (retryButton) {
+        retryButton.hidden = false;
+      }
+      const message = error instanceof Error ? error.message : ROUTE_FAILURE_STATUS;
+      setText(status, message.includes('다시 시도') ? message : `${message} 다시 시도해주세요.`);
+    } finally {
+      if (!destroyed && generation === routeGeneration) {
+        setRouteLoading(false);
+      }
     }
   }
 
@@ -451,6 +486,10 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     setText(status, '지도에서 도착지를 선택해주세요.');
   });
   addListener(fitRoutesButton, 'click', () => map?.fitRoutes?.());
+  addListener(retryButton, 'click', () => void searchRoutes());
+  addListener(view, 'offline', () => {
+    setText(status, '인터넷 연결이 끊겼습니다. 연결 후 다시 시도해주세요.');
+  });
   setupSearch('start', startInput, startResults);
   setupSearch('end', endInput, endResults);
 

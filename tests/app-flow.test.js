@@ -284,4 +284,43 @@ describe('route search flow', () => {
     expect(map.setPoint).not.toHaveBeenCalled();
     expect(document.querySelector('#start-input').value).toBe('');
   });
+
+  it('경로 검색 실패 후 다시 시도할 수 있고 검색 중 제출을 잠근다', async () => {
+    let rejectFirst;
+    const feature = { properties: { 'track-length': '1000', messages: [] }, geometry: { type: 'LineString', coordinates: [] } };
+    const routing = {
+      getRoutes: vi.fn()
+        .mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; }))
+        .mockResolvedValueOnce([{ mode: 'A', feature }])
+    };
+    const map = { setPoint: vi.fn(), setRoutes: vi.fn(), selectRoute: vi.fn() };
+    const app = createApp({ document, map, routing, geocoding: {}, navigator: {} });
+    app.setPoint('start', { label: '출발', lat: 37.4, lng: 127.1 });
+    app.setPoint('end', { label: '도착', lat: 37.5, lng: 127.2 });
+
+    document.querySelector('#route-form').requestSubmit();
+    expect(document.querySelector('#route-form button[type="submit"]').disabled).toBe(true);
+    rejectFirst(new Error('일시적인 오류'));
+    await vi.waitFor(() => expect(document.querySelector('#retry').hidden).toBe(false));
+    expect(document.querySelector('#route-form button[type="submit"]').disabled).toBe(false);
+
+    document.querySelector('#retry').click();
+    await vi.waitFor(() => expect(routing.getRoutes).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-route-mode]')).toHaveLength(1));
+    expect(document.querySelector('#retry').hidden).toBe(true);
+    app.destroy();
+  });
+
+  it('오프라인 전환을 상태 영역에 안내하고 destroy 후에는 갱신하지 않는다', () => {
+    const app = createApp({ document, geocoding: {}, navigator: {} });
+    const view = document.defaultView;
+
+    view.dispatchEvent(new Event('offline'));
+    expect(document.querySelector('#status').textContent).toBe('인터넷 연결이 끊겼습니다. 연결 후 다시 시도해주세요.');
+
+    app.destroy();
+    document.querySelector('#status').textContent = '정리됨';
+    view.dispatchEvent(new Event('offline'));
+    expect(document.querySelector('#status').textContent).toBe('정리됨');
+  });
 });

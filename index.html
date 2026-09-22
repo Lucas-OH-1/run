@@ -26,9 +26,12 @@
         <p id="status" aria-live="polite"></p>
         <button id="retry" type="button" hidden>다시 시도</button>
         <section id="route-list" aria-label="추천 경로"></section>
+        <p class="safety">지도와 실제 공사·침수·통제 상태가 다를 수 있으니 현장을 확인하세요.</p>
       </aside>
       <div id="map" class="map" role="application" aria-label="러닝 경로 지도"></div>
-      <button id="fit-routes" type="button">전체 경로 보기</button>
+      <div class="map-actions">
+        <button id="fit-routes" type="button">전체 경로 보기</button>
+      </div>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>
