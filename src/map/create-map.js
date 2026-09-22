@@ -12,7 +12,15 @@ export function routeStyle(mode, selected = 'A') {
 }
 
 function isPoint(point) {
-  return point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
+  return (
+    point &&
+    Number.isFinite(point.lat) &&
+    Number.isFinite(point.lng) &&
+    point.lat >= -90 &&
+    point.lat <= 90 &&
+    point.lng >= -180 &&
+    point.lng <= 180
+  );
 }
 
 function isCoordinatePair(coordinates) {
@@ -109,13 +117,13 @@ export function createRouteMap(element, { onMapClick } = {}) {
   }
 
   function setPoint(kind, point) {
+    if (!isPoint(point)) {
+      return;
+    }
+
     if (pointMarkers.has(kind)) {
       pointMarkers.get(kind).remove();
       pointMarkers.delete(kind);
-    }
-
-    if (!isPoint(point)) {
-      return;
     }
 
     const label = kind === 'start' ? '출발' : '도착';
