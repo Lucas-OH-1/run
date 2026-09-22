@@ -7,6 +7,7 @@ const ROUTE_ERROR = '러닝 경로를 찾지 못했습니다. 지점을 조금 �
 export function createRoutingClient({ fetchImpl = fetch } = {}) {
   const profileIds = new Map();
   const profilePromises = new Map();
+  const refreshPromises = new Map();
 
   async function uploadProfile(mode) {
     try {
@@ -18,7 +19,14 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
         throw new Error(SERVICE_ERROR);
       }
       const data = await response.json();
-      if (!data || typeof data !== 'object' || Array.isArray(data) || data.error || !data.profileid) {
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        Array.isArray(data) ||
+        data.error ||
+        typeof data.profileid !== 'string' ||
+        data.profileid.trim() === ''
+      ) {
         throw new Error(SERVICE_ERROR);
       }
       profileIds.set(mode, data.profileid);
@@ -51,6 +59,30 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
     return promise;
   }
 
+  function refreshProfile(mode, failedProfile) {
+    const currentProfile = profileIds.get(mode);
+    if (currentProfile && currentProfile !== failedProfile) {
+      return Promise.resolve(currentProfile);
+    }
+
+    const inFlight = refreshPromises.get(mode);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    if (profileIds.get(mode) === failedProfile) {
+      profileIds.delete(mode);
+    }
+
+    const promise = getProfile(mode).finally(() => {
+      if (refreshPromises.get(mode) === promise) {
+        refreshPromises.delete(mode);
+      }
+    });
+    refreshPromises.set(mode, promise);
+    return promise;
+  }
+
   function routeUrl(profile, start, end) {
     const url = new URL(BROUTER_URL);
     url.searchParams.set('lonlats', `${start.lng},${start.lat}|${end.lng},${end.lat}`);
@@ -64,25 +96,15 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
     let profile = await getProfile(mode);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      let response;
       try {
-        response = await fetchImpl(routeUrl(profile, start, end));
-      } catch {
-        throw new Error(ROUTE_ERROR);
-      }
-
-      if (!response?.ok) {
-        if (attempt === 1) {
+        const response = await fetchImpl(routeUrl(profile, start, end));
+        if (!response?.ok) {
           throw new Error(ROUTE_ERROR);
         }
-        profileIds.delete(mode);
-        profile = await getProfile(mode);
-        continue;
-      }
 
-      try {
         const data = await response.json();
         const feature = data?.features?.[0];
+        const coordinates = feature?.geometry?.coordinates;
         if (
           !data ||
           typeof data !== 'object' ||
@@ -95,16 +117,28 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
           !feature.geometry ||
           typeof feature.geometry !== 'object' ||
           Array.isArray(feature.geometry) ||
-          !Array.isArray(feature.geometry.coordinates)
+          feature.geometry.type !== 'LineString' ||
+          !Array.isArray(coordinates) ||
+          coordinates.length < 2 ||
+          coordinates.some(coordinate =>
+            !Array.isArray(coordinate) ||
+            coordinate.length < 2 ||
+            !Number.isFinite(coordinate[0]) ||
+            !Number.isFinite(coordinate[1]) ||
+            coordinate[0] < -180 ||
+            coordinate[0] > 180 ||
+            coordinate[1] < -90 ||
+            coordinate[1] > 90
+          )
         ) {
           throw new Error(ROUTE_ERROR);
         }
         return { mode, feature };
       } catch (error) {
-        if (error instanceof Error && error.message === ROUTE_ERROR) {
-          throw error;
+        if (attempt === 1) {
+          throw new Error(ROUTE_ERROR);
         }
-        throw new Error(ROUTE_ERROR);
+        profile = await refreshProfile(mode, profile);
       }
     }
 
