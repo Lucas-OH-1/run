@@ -32,21 +32,40 @@ describe('routeStyle', () => {
     routeMap.destroy();
   });
 
-  it('널, 비배열, 잘못된 경로 입력을 무시한다', () => {
+  it('잘못된 좌표를 무시하고 비배열 입력으로 기존 경로를 지우지 않는다', () => {
     const container = document.createElement('div');
     document.body.append(container);
     const routeMap = createRouteMap(container);
+    const validRoute = {
+      mode: 'A',
+      feature: { type: 'Feature', geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] } }
+    };
+
+    routeMap.setRoutes([validRoute]);
+    expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(1);
 
     expect(() => routeMap.setRoutes(null)).not.toThrow();
     expect(() => routeMap.setRoutes({})).not.toThrow();
+    expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(1);
+
     expect(() =>
       routeMap.setRoutes([
         null,
         {},
         { feature: null },
-        { feature: { geometry: null } },
-        { mode: 'A', feature: { type: 'Feature', geometry: { type: 'LineString' } } },
-        { mode: 'B', feature: { type: 'Feature', geometry: { type: 'Unknown', coordinates: [] } } }
+        {
+          mode: 'B',
+          feature: {
+            type: 'Feature',
+            geometry: {
+              type: 'GeometryCollection',
+              geometries: [
+                { type: 'LineString', coordinates: [[0, 0], [181, 1]] },
+                { type: 'Point', coordinates: [0, 'invalid'] }
+              ]
+            }
+          }
+        }
       ])
     ).not.toThrow();
     expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(0);

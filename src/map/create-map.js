@@ -15,25 +15,66 @@ function isPoint(point) {
   return point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
 }
 
-const GEOMETRY_TYPES = new Set([
-  'Point',
-  'MultiPoint',
-  'LineString',
-  'MultiLineString',
-  'Polygon',
-  'MultiPolygon'
-]);
+function isCoordinatePair(coordinates) {
+  return (
+    Array.isArray(coordinates) &&
+    coordinates.length >= 2 &&
+    Number.isFinite(coordinates[0]) &&
+    Number.isFinite(coordinates[1]) &&
+    coordinates[0] >= -180 &&
+    coordinates[0] <= 180 &&
+    coordinates[1] >= -90 &&
+    coordinates[1] <= 90
+  );
+}
+
+function isCoordinateSequence(coordinates, minimumLength) {
+  return (
+    Array.isArray(coordinates) &&
+    coordinates.length >= minimumLength &&
+    coordinates.every(isCoordinatePair)
+  );
+}
 
 function isGeometryLike(geometry) {
   if (!geometry || typeof geometry !== 'object' || Array.isArray(geometry)) {
     return false;
   }
 
-  if (geometry.type === 'GeometryCollection') {
-    return Array.isArray(geometry.geometries) && geometry.geometries.every(isGeometryLike);
+  switch (geometry.type) {
+    case 'Point':
+      return isCoordinatePair(geometry.coordinates);
+    case 'MultiPoint':
+      return isCoordinateSequence(geometry.coordinates, 1);
+    case 'LineString':
+      return isCoordinateSequence(geometry.coordinates, 2);
+    case 'MultiLineString':
+      return (
+        Array.isArray(geometry.coordinates) &&
+        geometry.coordinates.length >= 1 &&
+        geometry.coordinates.every(line => isCoordinateSequence(line, 2))
+      );
+    case 'Polygon':
+      return (
+        Array.isArray(geometry.coordinates) &&
+        geometry.coordinates.length >= 1 &&
+        geometry.coordinates.every(ring => isCoordinateSequence(ring, 4))
+      );
+    case 'MultiPolygon':
+      return (
+        Array.isArray(geometry.coordinates) &&
+        geometry.coordinates.length >= 1 &&
+        geometry.coordinates.every(polygon =>
+          Array.isArray(polygon) &&
+          polygon.length >= 1 &&
+          polygon.every(ring => isCoordinateSequence(ring, 4))
+        )
+      );
+    case 'GeometryCollection':
+      return Array.isArray(geometry.geometries) && geometry.geometries.every(isGeometryLike);
+    default:
+      return false;
   }
-
-  return GEOMETRY_TYPES.has(geometry.type) && Array.isArray(geometry.coordinates);
 }
 
 function isFeatureLike(feature) {
@@ -83,11 +124,11 @@ export function createRouteMap(element, { onMapClick } = {}) {
   }
 
   function setRoutes(routes = []) {
-    clearRoutes();
-
     if (!Array.isArray(routes)) {
       return;
     }
+
+    clearRoutes();
 
     for (const route of routes) {
       const feature = route?.feature ?? route;
