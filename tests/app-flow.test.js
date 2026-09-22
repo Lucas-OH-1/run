@@ -86,6 +86,45 @@ describe('route search flow', () => {
     }
   });
 
+  it('선택된 주소 입력을 수정하면 표시된 카드와 지도 경로를 즉시 제거한다', async () => {
+    const feature = { properties: { 'track-length': '1000', messages: [] }, geometry: { type: 'LineString', coordinates: [] } };
+    const map = { setRoutes: vi.fn(), selectRoute: vi.fn(), setPoint: vi.fn() };
+    const routing = { getRoutes: vi.fn().mockResolvedValue([{ mode: 'A', feature }]) };
+    const app = createApp({ document, map, routing, geocoding: {}, navigator: {} });
+    app.setPoint('start', { label: '출발', lat: 37.4, lng: 127.1 });
+    app.setPoint('end', { label: '도착', lat: 37.5, lng: 127.2 });
+    document.querySelector('#route-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-route-mode]')).toHaveLength(1));
+
+    const input = document.querySelector('#start-input');
+    input.value = '새 출발지';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(document.querySelectorAll('[data-route-mode]')).toHaveLength(0);
+    expect(map.setRoutes).toHaveBeenLastCalledWith([]);
+    app.destroy();
+  });
+
+  it('늦게 도착한 현재 위치 역지오코딩은 새로 선택한 출발지를 덮어쓰지 않는다', async () => {
+    let resolveReverse;
+    const reversePlace = vi.fn(() => new Promise(resolve => { resolveReverse = resolve; }));
+    const getCurrentPosition = vi.fn();
+    const map = { setPoint: vi.fn() };
+    const app = createApp({ document, map, geocoding: { reversePlace }, navigator: { geolocation: { getCurrentPosition } } });
+
+    document.querySelector('#use-location').click();
+    getCurrentPosition.mock.calls[0][0]({ coords: { latitude: 37.5, longitude: 127.1 } });
+    await vi.waitFor(() => expect(reversePlace).toHaveBeenCalledOnce());
+    app.setPoint('start', { label: '직접 선택한 출발지', lat: 37.6, lng: 127.2 });
+    resolveReverse({ label: '늦은 현재 위치', lat: 37.5, lng: 127.1 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(document.querySelector('#start-input').value).toBe('직접 선택한 출발지');
+    expect(map.setPoint).toHaveBeenCalledOnce();
+    expect(map.setPoint).toHaveBeenLastCalledWith('start', expect.objectContaining({ label: '직접 선택한 출발지' }));
+    app.destroy();
+  });
+
   it('주소 입력을 수정하면 선택 지점과 이전 경로 응답을 무효화한다', async () => {
     let resolveRoutes;
     const routing = { getRoutes: vi.fn(() => new Promise(resolve => { resolveRoutes = resolve; })) };

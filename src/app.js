@@ -116,12 +116,35 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     setText(status, INITIAL_STATUS);
   }
 
+  function hasDisplayedRoutes() {
+    return state.routes.length > 0 || (routeList?.querySelector('[data-route-mode]') ?? null) !== null;
+  }
+
+  function clearDisplayedRoutes() {
+    state.routes = [];
+    clearElement(routeList);
+    map?.setRoutes?.([]);
+  }
+
+  function invalidatePointSelection({ reverse = true } = {}) {
+    routeGeneration += 1;
+    if (reverse) {
+      reverseGeneration += 1;
+    }
+    if (hasDisplayedRoutes()) {
+      clearDisplayedRoutes();
+      return;
+    }
+    state.routes = [];
+    clearElement(routeList);
+  }
+
   function setPoint(kind, point) {
     if (destroyed || !['start', 'end'].includes(kind) || !isValidPoint(point)) {
       return;
     }
 
-    routeGeneration += 1;
+    invalidatePointSelection();
     const normalized = { label: point.label || coordinateLabel(point), lat: point.lat, lng: point.lng };
     state[kind] = normalized;
 
@@ -218,9 +241,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
         return;
       }
       if (!Array.isArray(routes) || routes.length === 0) {
-        state.routes = [];
-        clearElement(routeList);
-        map?.setRoutes?.([]);
+        clearDisplayedRoutes();
         setText(status, ROUTE_FAILURE_STATUS);
         return;
       }
@@ -238,9 +259,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       ) {
         return;
       }
-      state.routes = [];
-      clearElement(routeList);
-      map?.setRoutes?.([]);
+      clearDisplayedRoutes();
       setText(status, ROUTE_FAILURE_STATUS);
     }
   }
@@ -363,9 +382,10 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
 
     addListener(input, 'input', () => {
       const generation = ++searchGenerations[kind];
+      reverseGeneration += 1;
       if (state[kind]) {
         state[kind] = null;
-        routeGeneration += 1;
+        invalidatePointSelection({ reverse: false });
         updateReadyStatus();
       }
       if (pendingTimer) {
@@ -418,10 +438,12 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   });
   addListener(useLocationButton, 'click', () => void useCurrentLocation());
   addListener(pickStartButton, 'click', () => {
+    reverseGeneration += 1;
     state.pickMode = 'start';
     setText(status, '지도에서 출발지를 선택해주세요.');
   });
   addListener(pickEndButton, 'click', () => {
+    reverseGeneration += 1;
     state.pickMode = 'end';
     setText(status, '지도에서 도착지를 선택해주세요.');
   });
@@ -446,11 +468,9 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     }
     timers.clear();
     state.pickMode = null;
-    state.routes = [];
-    clearElement(routeList);
+    clearDisplayedRoutes();
     clearElement(startResults);
     clearElement(endResults);
-    map?.setRoutes?.([]);
   }
 
   return { setPoint, handleMapClick, destroy };
