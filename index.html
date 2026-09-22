@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RUN ROUTE</title>
+  </head>
+  <body>
+    <main id="app" class="layout">
+      <aside class="panel">
+        <h1>RUN ROUTE</h1>
+        <form id="route-form">
+          <label for="start-input">출발지</label>
+          <input id="start-input" autocomplete="off" aria-controls="start-results">
+          <ul id="start-results" role="listbox"></ul>
+          <label for="end-input">도착지</label>
+          <input id="end-input" autocomplete="off" aria-controls="end-results">
+          <ul id="end-results" role="listbox"></ul>
+          <div>
+            <button type="button" id="use-location">현재 위치를 출발지로</button>
+            <button type="button" id="pick-start">지도에서 출발지 선택</button>
+            <button type="button" id="pick-end">지도에서 도착지 선택</button>
+          </div>
+          <button type="submit">러닝 경로 찾기</button>
+        </form>
+        <p id="status" aria-live="polite"></p>
+        <button id="retry" type="button" hidden>다시 시도</button>
+        <section id="route-list" aria-label="추천 경로"></section>
+      </aside>
+      <div id="map" class="map" role="application" aria-label="러닝 경로 지도"></div>
+      <button id="fit-routes" type="button">전체 경로 보기</button>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
