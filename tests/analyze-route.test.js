@@ -19,4 +19,14 @@ describe('analyzeRoute', () => {
       stepsM: 100, sharedCyclewayM: 2500, showPedestrianSideHint: true, showStructureHint: false
     });
   });
+
+  it('공유 자전거도로가 있을 때만 보행 측면 안내를 표시한다', () => {
+    const routeWithWay = (wayTags) => ({ properties: {
+      'track-length': '100',
+      messages: [feature.properties.messages[0], ['0','0','0','100','0','0','0','0','0',wayTags]]
+    }});
+
+    expect(analyzeRoute(routeWithWay('highway=residential')).showPedestrianSideHint).toBe(false);
+    expect(analyzeRoute(routeWithWay('highway=cycleway foot=designated')).showPedestrianSideHint).toBe(true);
+  });
 });

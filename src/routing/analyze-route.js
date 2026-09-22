@@ -7,11 +7,7 @@ const ROAD_HIGHWAYS = new Set([
   'tertiary',
   'secondary',
   'primary',
-  'trunk',
-  'tertiary_link',
-  'secondary_link',
-  'primary_link',
-  'trunk_link'
+  'trunk'
 ]);
 const SHARED_FOOT_VALUES = new Set(['yes', 'designated', 'permissive']);
 
@@ -95,7 +91,7 @@ export function analyzeRoute(feature) {
     roadM,
     stepsM,
     sharedCyclewayM,
-    showPedestrianSideHint: roadM > 0,
+    showPedestrianSideHint: sharedCyclewayM > 0,
     showStructureHint
   };
 }
