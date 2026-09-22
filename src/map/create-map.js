@@ -131,6 +131,15 @@ export function createRouteMap(element, { onMapClick } = {}) {
     pointMarkers.set(kind, marker);
   }
 
+  function clearPoint(kind) {
+    const marker = pointMarkers.get(kind);
+    if (!marker) {
+      return;
+    }
+    marker.remove();
+    pointMarkers.delete(kind);
+  }
+
   function setRoutes(routes = []) {
     if (!Array.isArray(routes)) {
       return;
@@ -192,5 +201,5 @@ export function createRouteMap(element, { onMapClick } = {}) {
     map.remove();
   }
 
-  return { map, setPoint, setRoutes, selectRoute, fitRoutes, locate, destroy };
+  return { map, setPoint, clearPoint, setRoutes, selectRoute, fitRoutes, locate, destroy };
 }

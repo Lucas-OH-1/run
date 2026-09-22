@@ -387,6 +387,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       reverseGeneration += 1;
       if (state[kind]) {
         state[kind] = null;
+        map?.clearPoint?.(kind);
         invalidatePointSelection({ reverse: false });
         updateReadyStatus();
       }
@@ -473,6 +474,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     clearDisplayedRoutes();
     clearElement(startResults);
     clearElement(endResults);
+    map?.destroy?.();
   }
 
   return { setPoint, handleMapClick, destroy };

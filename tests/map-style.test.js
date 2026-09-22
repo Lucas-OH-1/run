@@ -59,6 +59,23 @@ describe('routeStyle', () => {
     routeMap.destroy();
   });
 
+  it('해당 지점 마커만 지우고 다른 지점 마커는 보존한다', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const routeMap = createRouteMap(container);
+
+    routeMap.setPoint('start', { lat: 37, lng: 127 });
+    routeMap.setPoint('end', { lat: 38, lng: 128 });
+    routeMap.clearPoint('start');
+
+    expect(Object.values(routeMap.map._layers).map(layer => layer.getLatLng?.()).filter(Boolean)).toEqual([
+      { lat: 38, lng: 128 }
+    ]);
+    expect(container.querySelectorAll('.leaflet-marker-icon')).toHaveLength(1);
+
+    routeMap.destroy();
+  });
+
   it('지도 클릭 좌표를 콜백으로 전달한다', () => {
     const container = document.createElement('div');
     document.body.append(container);

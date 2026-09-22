@@ -88,7 +88,7 @@ describe('route search flow', () => {
 
   it('선택된 주소 입력을 수정하면 표시된 카드와 지도 경로를 즉시 제거한다', async () => {
     const feature = { properties: { 'track-length': '1000', messages: [] }, geometry: { type: 'LineString', coordinates: [] } };
-    const map = { setRoutes: vi.fn(), selectRoute: vi.fn(), setPoint: vi.fn() };
+    const map = { setRoutes: vi.fn(), selectRoute: vi.fn(), setPoint: vi.fn(), clearPoint: vi.fn() };
     const routing = { getRoutes: vi.fn().mockResolvedValue([{ mode: 'A', feature }]) };
     const app = createApp({ document, map, routing, geocoding: {}, navigator: {} });
     app.setPoint('start', { label: '출발', lat: 37.4, lng: 127.1 });
@@ -102,7 +102,18 @@ describe('route search flow', () => {
 
     expect(document.querySelectorAll('[data-route-mode]')).toHaveLength(0);
     expect(map.setRoutes).toHaveBeenLastCalledWith([]);
+    expect(map.clearPoint).toHaveBeenCalledWith('start');
+    expect(map.clearPoint).not.toHaveBeenCalledWith('end');
     app.destroy();
+  });
+
+  it('destroy 시 지도 정리 함수를 호출한다', () => {
+    const map = { setRoutes: vi.fn(), clearPoint: vi.fn(), destroy: vi.fn() };
+    const app = createApp({ document, map, geocoding: {}, navigator: {} });
+
+    app.destroy();
+
+    expect(map.destroy).toHaveBeenCalledOnce();
   });
 
   it('늦게 도착한 현재 위치 역지오코딩은 새로 선택한 출발지를 덮어쓰지 않는다', async () => {
