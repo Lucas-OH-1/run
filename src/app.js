@@ -6,8 +6,26 @@ const MODE_TITLES = {
   B: 'B 경로',
   C: 'C 경로'
 };
+const MODE_DESCRIPTIONS = {
+  A: '하천변 보행로 우선',
+  B: '녹도·겸용도로 우선',
+  C: '보행 최단거리'
+};
 const ROUTE_MODES = new Set(Object.keys(MODE_TITLES));
+const ROUTE_FAILURE_STATUS = '경로를 찾지 못했습니다. 지점을 확인한 뒤 다시 시도해주세요.';
 const SEARCH_DELAY_MS = 350;
+
+function isValidPoint(point) {
+  return (
+    point &&
+    Number.isFinite(point.lat) &&
+    Number.isFinite(point.lng) &&
+    point.lat >= -90 &&
+    point.lat <= 90 &&
+    point.lng >= -180 &&
+    point.lng <= 180
+  );
+}
 
 function coordinateLabel(point) {
   return `${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`;
@@ -41,6 +59,16 @@ function safeRouteMode(route, index) {
   const mode = routeMode(route);
   const fallback = ['A', 'B', 'C'][index] ?? 'A';
   return ROUTE_MODES.has(mode) ? mode : fallback;
+}
+
+function normalizeRoutes(routes) {
+  return routes.map((route, index) => {
+    const mode = safeRouteMode(route, index);
+    if (route && typeof route === 'object' && !Array.isArray(route)) {
+      return { ...route, mode };
+    }
+    return { mode, feature: route };
+  });
 }
 
 export function createApp({ document, map, routing, geocoding, navigator = window.navigator }) {
@@ -89,10 +117,11 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   }
 
   function setPoint(kind, point) {
-    if (destroyed || !point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
+    if (destroyed || !['start', 'end'].includes(kind) || !isValidPoint(point)) {
       return;
     }
 
+    routeGeneration += 1;
     const normalized = { label: point.label || coordinateLabel(point), lat: point.lat, lng: point.lng };
     state[kind] = normalized;
 
@@ -130,19 +159,21 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
 
     const hints = [];
     if (analysis.showPedestrianSideHint) {
-      hints.push(`자전거·보행 겸용 ${formatMeters(analysis.sharedCyclewayM)}`);
+      hints.push('자전거도로 옆 보행로를 이용하세요.');
     }
     if (analysis.showStructureHint) {
-      hints.push('교량 또는 터널 포함');
+      hints.push('교량·지하통로의 현장 통제 상태를 확인하세요.');
     }
 
     const title = document.createElement('strong');
     title.textContent = MODE_TITLES[mode];
+    const strategy = document.createElement('span');
+    strategy.textContent = MODE_DESCRIPTIONS[mode];
     const summary = document.createElement('span');
     summary.textContent = `${formatKm(analysis.distanceM)} · 약 ${analysis.minutes}분`;
     const details = document.createElement('span');
     details.textContent = `보행로 ${analysis.pedestrianPercent}% · 차도 ${formatMeters(analysis.roadM)} · 계단 ${formatMeters(analysis.stepsM)}`;
-    card.append(title, summary, details);
+    card.append(title, strategy, summary, details);
     for (const hint of hints) {
       const hintElement = document.createElement('small');
       hintElement.textContent = hint;
@@ -169,26 +200,48 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       return;
     }
     if (!state.start || !state.end) {
-      setText(status, INITIAL_STATUS);
+      setText(status, '출발지와 도착지를 모두 선택해주세요.');
       return;
     }
 
+    const start = state.start;
+    const end = state.end;
     setText(status, '경로를 검색하고 있습니다.');
     try {
-      const routes = await routing?.getRoutes?.(state.start, state.end);
-      if (destroyed || generation !== routeGeneration) {
+      const routes = await routing?.getRoutes?.(start, end);
+      if (
+        destroyed ||
+        generation !== routeGeneration ||
+        state.start !== start ||
+        state.end !== end
+      ) {
         return;
       }
-      state.routes = Array.isArray(routes) ? routes : [];
+      if (!Array.isArray(routes) || routes.length === 0) {
+        state.routes = [];
+        clearElement(routeList);
+        map?.setRoutes?.([]);
+        setText(status, ROUTE_FAILURE_STATUS);
+        return;
+      }
+      state.routes = normalizeRoutes(routes);
       map?.setRoutes?.(state.routes);
       renderRoutes(state.routes);
       selectRoute(state.selectedMode);
       setText(status, `${state.selectedMode} 경로를 추천합니다.`);
     } catch {
-      if (destroyed || generation !== routeGeneration) {
+      if (
+        destroyed ||
+        generation !== routeGeneration ||
+        state.start !== start ||
+        state.end !== end
+      ) {
         return;
       }
-      setText(status, '경로를 찾지 못했습니다. 지점을 확인한 뒤 다시 시도해주세요.');
+      state.routes = [];
+      clearElement(routeList);
+      map?.setRoutes?.([]);
+      setText(status, ROUTE_FAILURE_STATUS);
     }
   }
 
@@ -255,6 +308,10 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     if (destroyed || !state.pickMode) {
       return;
     }
+    if (!isValidPoint(point)) {
+      setText(status, '지도에서 유효한 위치를 선택해주세요.');
+      return;
+    }
 
     const kind = state.pickMode;
     const generation = ++reverseGeneration;
@@ -296,8 +353,21 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   function setupSearch(kind, input, list) {
     let pendingTimer = null;
 
+    function showSearchFailure() {
+      setText(status, '주소 검색에 실패했습니다. 지도에서 직접 선택할 수도 있습니다.');
+      clearElement(list);
+      const row = document.createElement('li');
+      row.textContent = '주소 검색에 실패했습니다.';
+      list?.append(row);
+    }
+
     addListener(input, 'input', () => {
       const generation = ++searchGenerations[kind];
+      if (state[kind]) {
+        state[kind] = null;
+        routeGeneration += 1;
+        updateReadyStatus();
+      }
       if (pendingTimer) {
         clearTimeout(pendingTimer);
         timers.delete(pendingTimer);
@@ -310,7 +380,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
           return;
         }
         if (typeof geocoding?.searchPlaces !== 'function') {
-          clearElement(list);
+          showSearchFailure();
           return;
         }
         try {
@@ -323,10 +393,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
           if (destroyed || generation !== searchGenerations[kind]) {
             return;
           }
-          clearElement(list);
-          const row = document.createElement('li');
-          row.textContent = '주소 검색에 실패했습니다. 다시 시도해주세요.';
-          list?.append(row);
+          showSearchFailure();
         }
       }, SEARCH_DELAY_MS);
       timers.add(pendingTimer);
@@ -334,6 +401,12 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
 
     addListener(input, 'keydown', event => {
       if (event.key === 'Escape') {
+        ++searchGenerations[kind];
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          timers.delete(pendingTimer);
+          pendingTimer = null;
+        }
         clearElement(list);
       }
     });
