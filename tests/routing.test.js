@@ -138,6 +138,9 @@ describe('routing client', () => {
     });
 
     await expectRouteError(fetchImpl);
+
+    expect(profileUploadCount(fetchImpl)).toBe(3);
+    expect(routeRequestCount(fetchImpl)).toBe(3);
   });
 
   it('경로 요청 네트워크 오류를 경로 오류로 처리한다', async () => {
@@ -150,6 +153,9 @@ describe('routing client', () => {
     });
 
     await expectRouteError(fetchImpl);
+
+    expect(profileUploadCount(fetchImpl)).toBe(3);
+    expect(routeRequestCount(fetchImpl)).toBe(3);
   });
 
   it('같은 만료 프로필의 동시 실패에는 모드별 재등록을 한 번만 수행한다', async () => {

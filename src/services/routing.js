@@ -96,50 +96,59 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
     let profile = await getProfile(mode);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      let response;
       try {
-        const response = await fetchImpl(routeUrl(profile, start, end));
-        if (!response?.ok) {
-          throw new Error(ROUTE_ERROR);
-        }
+        response = await fetchImpl(routeUrl(profile, start, end));
+      } catch {
+        throw new Error(ROUTE_ERROR);
+      }
 
-        const data = await response.json();
-        const feature = data?.features?.[0];
-        const coordinates = feature?.geometry?.coordinates;
-        if (
-          !data ||
-          typeof data !== 'object' ||
-          Array.isArray(data) ||
-          !Array.isArray(data.features) ||
-          !feature ||
-          typeof feature !== 'object' ||
-          Array.isArray(feature) ||
-          feature.type !== 'Feature' ||
-          !feature.geometry ||
-          typeof feature.geometry !== 'object' ||
-          Array.isArray(feature.geometry) ||
-          feature.geometry.type !== 'LineString' ||
-          !Array.isArray(coordinates) ||
-          coordinates.length < 2 ||
-          coordinates.some(coordinate =>
-            !Array.isArray(coordinate) ||
-            coordinate.length < 2 ||
-            !Number.isFinite(coordinate[0]) ||
-            !Number.isFinite(coordinate[1]) ||
-            coordinate[0] < -180 ||
-            coordinate[0] > 180 ||
-            coordinate[1] < -90 ||
-            coordinate[1] > 90
-          )
-        ) {
-          throw new Error(ROUTE_ERROR);
-        }
-        return { mode, feature };
-      } catch (error) {
+      if (!response?.ok) {
         if (attempt === 1) {
           throw new Error(ROUTE_ERROR);
         }
         profile = await refreshProfile(mode, profile);
+        continue;
       }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(ROUTE_ERROR);
+      }
+
+      const feature = data?.features?.[0];
+      const coordinates = feature?.geometry?.coordinates;
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        Array.isArray(data) ||
+        !Array.isArray(data.features) ||
+        !feature ||
+        typeof feature !== 'object' ||
+        Array.isArray(feature) ||
+        feature.type !== 'Feature' ||
+        !feature.geometry ||
+        typeof feature.geometry !== 'object' ||
+        Array.isArray(feature.geometry) ||
+        feature.geometry.type !== 'LineString' ||
+        !Array.isArray(coordinates) ||
+        coordinates.length < 2 ||
+        coordinates.some(coordinate =>
+          !Array.isArray(coordinate) ||
+          coordinate.length < 2 ||
+          !Number.isFinite(coordinate[0]) ||
+          !Number.isFinite(coordinate[1]) ||
+          coordinate[0] < -180 ||
+          coordinate[0] > 180 ||
+          coordinate[1] < -90 ||
+          coordinate[1] > 90
+        )
+      ) {
+        throw new Error(ROUTE_ERROR);
+      }
+      return { mode, feature };
     }
 
     throw new Error(ROUTE_ERROR);
