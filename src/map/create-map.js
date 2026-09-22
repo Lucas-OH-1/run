@@ -2,7 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { DEFAULT_CENTER, DEFAULT_ZOOM, ROUTE_COLORS } from '../config.js';
 
-export function routeStyle(mode, selected) {
+export function routeStyle(mode, selected = 'A') {
   return {
     color: ROUTE_COLORS[mode],
     weight: mode === selected ? 8 : 4,
@@ -15,6 +15,31 @@ function isPoint(point) {
   return point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
 }
 
+const GEOMETRY_TYPES = new Set([
+  'Point',
+  'MultiPoint',
+  'LineString',
+  'MultiLineString',
+  'Polygon',
+  'MultiPolygon'
+]);
+
+function isGeometryLike(geometry) {
+  if (!geometry || typeof geometry !== 'object' || Array.isArray(geometry)) {
+    return false;
+  }
+
+  if (geometry.type === 'GeometryCollection') {
+    return Array.isArray(geometry.geometries) && geometry.geometries.every(isGeometryLike);
+  }
+
+  return GEOMETRY_TYPES.has(geometry.type) && Array.isArray(geometry.coordinates);
+}
+
+function isFeatureLike(feature) {
+  return feature && typeof feature === 'object' && !Array.isArray(feature) && isGeometryLike(feature.geometry);
+}
+
 export function createRouteMap(element, { onMapClick } = {}) {
   const map = L.map(element).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
   const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -24,7 +49,7 @@ export function createRouteMap(element, { onMapClick } = {}) {
   }).addTo(map);
   const routeLayers = [];
   const pointMarkers = new Map();
-  let selectedMode = null;
+  let selectedMode = 'A';
   let destroyed = false;
 
   function handleMapClick(event) {
@@ -60,9 +85,13 @@ export function createRouteMap(element, { onMapClick } = {}) {
   function setRoutes(routes = []) {
     clearRoutes();
 
+    if (!Array.isArray(routes)) {
+      return;
+    }
+
     for (const route of routes) {
       const feature = route?.feature ?? route;
-      if (!feature?.geometry) {
+      if (!isFeatureLike(feature)) {
         continue;
       }
 
