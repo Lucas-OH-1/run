@@ -6,20 +6,39 @@ function coordinateLabel(lat, lng) {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
+function isValidCoordinate(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng)
+    && lat >= -90 && lat <= 90
+    && lng >= -180 && lng <= 180;
+}
+
+function propertyValue(value) {
+  return typeof value === 'string' || typeof value === 'number' ? value : null;
+}
+
 function labelFor(properties = {}, lat, lng) {
   const safeProperties = properties && typeof properties === 'object' ? properties : {};
-  const street = [safeProperties.street, safeProperties.housenumber].filter(Boolean).join(' ');
-  const parts = [safeProperties.name, street, safeProperties.district, safeProperties.city].filter(Boolean);
+  const street = [safeProperties.street, safeProperties.housenumber]
+    .map(propertyValue)
+    .filter((value) => value !== null && value !== '')
+    .join(' ');
+  const parts = [safeProperties.name, street, safeProperties.district, safeProperties.city]
+    .map(propertyValue)
+    .filter((value) => value !== null && value !== '');
   return [...new Set(parts)].join(', ') || coordinateLabel(lat, lng);
 }
 
 function normalizeFeature(feature) {
   const coordinates = feature?.geometry?.coordinates;
-  if (!Array.isArray(coordinates) || !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1])) {
+  if (!Array.isArray(coordinates)) {
     return null;
   }
 
   const [lng, lat] = coordinates;
+  if (!isValidCoordinate(lat, lng)) {
+    return null;
+  }
+
   return { label: labelFor(feature.properties, lat, lng), lat, lng };
 }
 
@@ -52,7 +71,11 @@ export async function searchPlaces(query, fetchImpl = fetch) {
   return features.map(normalizeFeature).filter(Boolean);
 }
 
-export async function reversePlace({ lat, lng }, fetchImpl = fetch) {
+export async function reversePlace({ lat, lng } = {}, fetchImpl = fetch) {
+  if (!isValidCoordinate(lat, lng)) {
+    throw new Error(SERVICE_ERROR);
+  }
+
   const url = new URL(`${PHOTON_URL}/reverse`);
   url.searchParams.set('lat', lat);
   url.searchParams.set('lon', lng);

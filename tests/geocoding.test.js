@@ -53,6 +53,53 @@ describe('Photon client', () => {
     ]);
   });
 
+  it('검색 결과에서 범위를 벗어난 좌표를 건너뛴다', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(okResponse({ features: [
+      { geometry: { coordinates: [180.1, 37.5] }, properties: { name: '잘못된 경도' } },
+      { geometry: { coordinates: [127.1, 90.1] }, properties: { name: '잘못된 위도' } },
+      { geometry: { coordinates: [127.2, 37.6] }, properties: { name: '유효한 장소' } }
+    ] }));
+
+    await expect(searchPlaces('장소', fetchImpl)).resolves.toEqual([
+      { label: '유효한 장소', lat: 37.6, lng: 127.2 }
+    ]);
+  });
+
+  it('malformed properties 값은 무시하고 좌표 라벨로 대체한다', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(okResponse({ features: [{
+      geometry: { coordinates: [127.2, 37.6] },
+      properties: { name: {}, street: '위례서로', housenumber: { value: 273 }, city: true }
+    }] }));
+
+    await expect(searchPlaces('장소', fetchImpl)).resolves.toEqual([
+      { label: '위례서로', lat: 37.6, lng: 127.2 }
+    ]);
+  });
+
+  it('역지오코딩 결과의 범위를 벗어난 좌표는 요청 좌표를 반환한다', async () => {
+    const point = { lat: 37.5, lng: 127.1 };
+    const fetchImpl = vi.fn().mockResolvedValue(okResponse({
+      features: [{ geometry: { coordinates: [180.1, 37.5] }, properties: { name: '잘못된 장소' } }]
+    }));
+
+    await expect(reversePlace(point, fetchImpl)).resolves.toEqual({
+      label: '37.50000, 127.10000', lat: 37.5, lng: 127.1
+    });
+  });
+
+  it('역지오코딩 입력 좌표가 숫자가 아니거나 범위를 벗어나면 요청하지 않고 거부한다', async () => {
+    for (const point of [
+      { lat: '37.5', lng: 127.1 },
+      { lat: 91, lng: 127.1 },
+      { lat: 37.5, lng: -181 }
+    ]) {
+      const fetchImpl = vi.fn();
+
+      await expect(reversePlace(point, fetchImpl)).rejects.toEqual(new Error(serviceError));
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
   it('역지오코딩 결과가 없거나 malformed feature면 요청 좌표를 반환한다', async () => {
     const point = { lat: 37.5, lng: 127.1 };
     const fetchImpl = vi.fn().mockResolvedValue(okResponse({ features: [{ geometry: { coordinates: ['bad', 37.5] } }] }));
