@@ -6,6 +6,7 @@ const MODE_TITLES = {
   B: 'B 경로',
   C: 'C 경로'
 };
+const ROUTE_MODES = new Set(Object.keys(MODE_TITLES));
 const SEARCH_DELAY_MS = 350;
 
 function coordinateLabel(point) {
@@ -36,6 +37,12 @@ function routeMode(route) {
   return route?.mode ?? route?.feature?.properties?.mode;
 }
 
+function safeRouteMode(route, index) {
+  const mode = routeMode(route);
+  const fallback = ['A', 'B', 'C'][index] ?? 'A';
+  return ROUTE_MODES.has(mode) ? mode : fallback;
+}
+
 export function createApp({ document, map, routing, geocoding, navigator = window.navigator }) {
   const state = {
     start: null,
@@ -46,6 +53,10 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   };
   const timers = new Set();
   const listeners = [];
+  const searchGenerations = { start: 0, end: 0 };
+  let routeGeneration = 0;
+  let reverseGeneration = 0;
+  let destroyed = false;
 
   const form = document.querySelector('#route-form');
   const startInput = document.querySelector('#start-input');
@@ -78,7 +89,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   }
 
   function setPoint(kind, point) {
-    if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
+    if (destroyed || !point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
       return;
     }
 
@@ -96,6 +107,9 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   }
 
   function selectRoute(mode) {
+    if (destroyed || !ROUTE_MODES.has(mode)) {
+      return;
+    }
     state.selectedMode = mode;
     const cards = routeList?.querySelectorAll('[data-route-mode]') ?? [];
     for (const card of cards) {
@@ -106,7 +120,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   }
 
   function renderRouteCard(route, index) {
-    const mode = routeMode(route) ?? ['A', 'B', 'C'][index] ?? String(index + 1);
+    const mode = safeRouteMode(route, index);
     const analysis = analyzeRoute(route?.feature ?? route);
     const card = document.createElement('button');
     card.type = 'button';
@@ -122,25 +136,38 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       hints.push('교량 또는 터널 포함');
     }
 
-    card.innerHTML = `
-      <strong>${MODE_TITLES[mode] ?? `${mode} 경로`}</strong>
-      <span>${formatKm(analysis.distanceM)} · 약 ${analysis.minutes}분</span>
-      <span>보행로 ${analysis.pedestrianPercent}% · 차도 ${formatMeters(analysis.roadM)} · 계단 ${formatMeters(analysis.stepsM)}</span>
-      ${hints.map(hint => `<small>${hint}</small>`).join('')}
-    `;
+    const title = document.createElement('strong');
+    title.textContent = MODE_TITLES[mode];
+    const summary = document.createElement('span');
+    summary.textContent = `${formatKm(analysis.distanceM)} · 약 ${analysis.minutes}분`;
+    const details = document.createElement('span');
+    details.textContent = `보행로 ${analysis.pedestrianPercent}% · 차도 ${formatMeters(analysis.roadM)} · 계단 ${formatMeters(analysis.stepsM)}`;
+    card.append(title, summary, details);
+    for (const hint of hints) {
+      const hintElement = document.createElement('small');
+      hintElement.textContent = hint;
+      card.append(hintElement);
+    }
     card.addEventListener('click', () => selectRoute(mode));
     return card;
   }
 
   function renderRoutes(routes) {
+    if (destroyed) {
+      return;
+    }
     clearElement(routeList);
-    state.selectedMode = routeMode(routes[0]) ?? 'A';
+    state.selectedMode = safeRouteMode(routes[0], 0);
     for (const [index, route] of routes.entries()) {
       routeList?.append(renderRouteCard(route, index));
     }
   }
 
   async function searchRoutes() {
+    const generation = ++routeGeneration;
+    if (destroyed) {
+      return;
+    }
     if (!state.start || !state.end) {
       setText(status, INITIAL_STATUS);
       return;
@@ -149,24 +176,35 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     setText(status, '경로를 검색하고 있습니다.');
     try {
       const routes = await routing?.getRoutes?.(state.start, state.end);
+      if (destroyed || generation !== routeGeneration) {
+        return;
+      }
       state.routes = Array.isArray(routes) ? routes : [];
       map?.setRoutes?.(state.routes);
       renderRoutes(state.routes);
       selectRoute(state.selectedMode);
       setText(status, `${state.selectedMode} 경로를 추천합니다.`);
     } catch {
+      if (destroyed || generation !== routeGeneration) {
+        return;
+      }
       setText(status, '경로를 찾지 못했습니다. 지점을 확인한 뒤 다시 시도해주세요.');
     }
   }
 
-  function reverseOrCoordinate(point) {
+  function reverseOrCoordinate(point, { fallback = true } = {}) {
     if (typeof geocoding?.reversePlace !== 'function') {
       return Promise.resolve({ label: coordinateLabel(point), lat: point.lat, lng: point.lng });
     }
-    return geocoding.reversePlace(point).catch(() => ({ label: coordinateLabel(point), lat: point.lat, lng: point.lng }));
+    const reverse = Promise.resolve().then(() => geocoding.reversePlace(point));
+    if (!fallback) {
+      return reverse;
+    }
+    return reverse.catch(() => ({ label: coordinateLabel(point), lat: point.lat, lng: point.lng }));
   }
 
   async function useCurrentLocation() {
+    const generation = ++reverseGeneration;
     const geolocation = navigator?.geolocation;
     if (!geolocation?.getCurrentPosition) {
       setText(status, '현재 위치 권한을 사용할 수 없습니다.');
@@ -176,21 +214,55 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     setText(status, '현재 위치를 확인하고 있습니다.');
     geolocation.getCurrentPosition(
       position => {
+        if (destroyed || generation !== reverseGeneration) {
+          return;
+        }
         const point = { lat: position.coords.latitude, lng: position.coords.longitude };
-        reverseOrCoordinate(point).then(place => setPoint('start', place));
+        if (
+          !Number.isFinite(point.lat) ||
+          !Number.isFinite(point.lng) ||
+          point.lat < -90 ||
+          point.lat > 90 ||
+          point.lng < -180 ||
+          point.lng > 180
+        ) {
+          setText(status, '현재 위치를 확인할 수 없습니다.');
+          return;
+        }
+        reverseOrCoordinate(point, { fallback: false })
+          .then(place => {
+            if (destroyed || generation !== reverseGeneration) {
+              return;
+            }
+            setPoint('start', place);
+          })
+          .catch(() => {
+            if (!destroyed && generation === reverseGeneration) {
+              setText(status, '현재 위치를 확인할 수 없습니다.');
+            }
+          });
       },
-      () => setText(status, '현재 위치 권한이 필요합니다.')
+      () => {
+        if (!destroyed && generation === reverseGeneration) {
+          setText(status, '현재 위치 권한이 필요합니다.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   }
 
   async function handleMapClick(point) {
-    if (!state.pickMode) {
+    if (destroyed || !state.pickMode) {
       return;
     }
 
     const kind = state.pickMode;
+    const generation = ++reverseGeneration;
     state.pickMode = null;
     const place = await reverseOrCoordinate(point);
+    if (destroyed || generation !== reverseGeneration) {
+      return;
+    }
     setPoint(kind, place);
   }
 
@@ -225,6 +297,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     let pendingTimer = null;
 
     addListener(input, 'input', () => {
+      const generation = ++searchGenerations[kind];
       if (pendingTimer) {
         clearTimeout(pendingTimer);
         timers.delete(pendingTimer);
@@ -233,14 +306,23 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       pendingTimer = setTimeout(async () => {
         timers.delete(pendingTimer);
         pendingTimer = null;
+        if (destroyed || generation !== searchGenerations[kind]) {
+          return;
+        }
         if (typeof geocoding?.searchPlaces !== 'function') {
           clearElement(list);
           return;
         }
         try {
           const places = await geocoding.searchPlaces(input.value);
+          if (destroyed || generation !== searchGenerations[kind]) {
+            return;
+          }
           renderSearchResults(kind, list, Array.isArray(places) ? places : []);
         } catch {
+          if (destroyed || generation !== searchGenerations[kind]) {
+            return;
+          }
           clearElement(list);
           const row = document.createElement('li');
           row.textContent = '주소 검색에 실패했습니다. 다시 시도해주세요.';
@@ -275,6 +357,14 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
   setupSearch('end', endInput, endResults);
 
   function destroy() {
+    if (destroyed) {
+      return;
+    }
+    destroyed = true;
+    routeGeneration += 1;
+    reverseGeneration += 1;
+    searchGenerations.start += 1;
+    searchGenerations.end += 1;
     for (const remove of listeners.splice(0)) {
       remove();
     }
@@ -282,6 +372,12 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       clearTimeout(timer);
     }
     timers.clear();
+    state.pickMode = null;
+    state.routes = [];
+    clearElement(routeList);
+    clearElement(startResults);
+    clearElement(endResults);
+    map?.setRoutes?.([]);
   }
 
   return { setPoint, handleMapClick, destroy };
