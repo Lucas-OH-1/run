@@ -11,6 +11,21 @@ const serviceError = '주소 검색 서비스를 사용할 수 없습니다.';
 const okResponse = (body) => ({ ok: true, json: async () => body });
 
 describe('Photon client', () => {
+  it('한국어 숫자 주소는 정확한 주소 지오코더 결과를 우선한다', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(okResponse({
+      candidates: [{
+        address: '경기도 성남시 수정구 태평동 7184-9',
+        location: { x: 127.125423479418, y: 37.441330746487 },
+        score: 100
+      }]
+    }));
+
+    await expect(searchPlaces('태평동 7184-9', fetchImpl)).resolves.toEqual([
+      { label: '경기도 성남시 수정구 태평동 7184-9', lat: 37.441330746487, lng: 127.125423479418 }
+    ]);
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates');
+  });
+
   it('검색 결과를 앱 좌표 형식으로 바꾸고 정확한 URL을 요청한다', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(okResponse({ features: [feature] }));
 

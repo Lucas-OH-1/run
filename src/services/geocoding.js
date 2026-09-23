@@ -1,4 +1,4 @@
-import { DEFAULT_CENTER, PHOTON_URL } from '../config.js';
+import { ARCGIS_GEOCODER_URL, DEFAULT_CENTER, PHOTON_URL } from '../config.js';
 
 const SERVICE_ERROR = '주소 검색 서비스를 사용할 수 없습니다.';
 
@@ -42,6 +42,20 @@ function normalizeFeature(feature) {
   return { label: labelFor(feature.properties, lat, lng), lat, lng };
 }
 
+function normalizeArcGISCandidate(candidate) {
+  const lat = candidate?.location?.y;
+  const lng = candidate?.location?.x;
+  if (!isValidCoordinate(lat, lng)) {
+    return null;
+  }
+
+  return { label: candidate.address || coordinateLabel(lat, lng), lat, lng };
+}
+
+function isKoreanAddressQuery(query) {
+  return /[가-힣]/.test(query) && /\d/.test(query) && /(동|로|길|번길|읍|면|리|시|군|구)/.test(query);
+}
+
 async function fetchJson(url, fetchImpl) {
   try {
     const response = await fetchImpl(url);
@@ -58,13 +72,9 @@ async function fetchJson(url, fetchImpl) {
   }
 }
 
-export async function searchPlaces(query, fetchImpl = fetch) {
-  if (query.trim().length < 2) {
-    return [];
-  }
-
+async function searchPhoton(query, fetchImpl) {
   const url = new URL(`${PHOTON_URL}/api/`);
-  url.searchParams.set('q', query.trim());
+  url.searchParams.set('q', query);
   url.searchParams.set('limit', '5');
   url.searchParams.set('lang', 'default');
   url.searchParams.set('lat', DEFAULT_CENTER[0]);
@@ -72,6 +82,39 @@ export async function searchPlaces(query, fetchImpl = fetch) {
   const data = await fetchJson(url, fetchImpl);
   const features = Array.isArray(data.features) ? data.features : [];
   return features.map(normalizeFeature).filter(Boolean);
+}
+
+async function searchArcGIS(query, fetchImpl) {
+  const url = new URL(ARCGIS_GEOCODER_URL);
+  url.searchParams.set('SingleLine', query);
+  url.searchParams.set('f', 'json');
+  url.searchParams.set('maxLocations', '5');
+  url.searchParams.set('outFields', '*');
+  url.searchParams.set('forStorage', 'false');
+  url.searchParams.set('countryCode', 'KOR');
+  const data = await fetchJson(url, fetchImpl);
+  const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  return candidates.map(normalizeArcGISCandidate).filter(Boolean);
+}
+
+export async function searchPlaces(query, fetchImpl = fetch) {
+  const normalizedQuery = query.trim();
+  if (normalizedQuery.length < 2) {
+    return [];
+  }
+
+  if (isKoreanAddressQuery(normalizedQuery)) {
+    try {
+      const addressResults = await searchArcGIS(normalizedQuery, fetchImpl);
+      if (addressResults.length > 0) {
+        return addressResults;
+      }
+    } catch {
+      // Fall back to Photon when the address geocoder is unavailable.
+    }
+  }
+
+  return searchPhoton(normalizedQuery, fetchImpl);
 }
 
 export async function reversePlace({ lat, lng } = {}, fetchImpl = fetch) {
