@@ -1,4 +1,4 @@
-import { PHOTON_URL } from '../config.js';
+import { DEFAULT_CENTER, PHOTON_URL } from '../config.js';
 
 const SERVICE_ERROR = '주소 검색 서비스를 사용할 수 없습니다.';
 
@@ -66,6 +66,9 @@ export async function searchPlaces(query, fetchImpl = fetch) {
   const url = new URL(`${PHOTON_URL}/api/`);
   url.searchParams.set('q', query.trim());
   url.searchParams.set('limit', '5');
+  url.searchParams.set('lang', 'default');
+  url.searchParams.set('lat', DEFAULT_CENTER[0]);
+  url.searchParams.set('lon', DEFAULT_CENTER[1]);
   const data = await fetchJson(url, fetchImpl);
   const features = Array.isArray(data.features) ? data.features : [];
   return features.map(normalizeFeature).filter(Boolean);
@@ -79,6 +82,7 @@ export async function reversePlace({ lat, lng } = {}, fetchImpl = fetch) {
   const url = new URL(`${PHOTON_URL}/reverse`);
   url.searchParams.set('lat', lat);
   url.searchParams.set('lon', lng);
+  url.searchParams.set('lang', 'default');
   const data = await fetchJson(url, fetchImpl);
   const feature = Array.isArray(data.features) ? normalizeFeature(data.features[0]) : null;
 

@@ -18,7 +18,7 @@ describe('Photon client', () => {
       { label: '밀파니 타워, 위례서로 273, 서울특별시', lat: 37.48913, lng: 127.14246 }
     ]);
     expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://photon.komoot.io/api/?q=%EB%B0%80%ED%8C%8C%EB%8B%88+%ED%83%80%EC%9B%8C&limit=5'
+      'https://photon.komoot.io/api/?q=%EB%B0%80%ED%8C%8C%EB%8B%88+%ED%83%80%EC%9B%8C&limit=5&lang=default&lat=37.466&lon=127.133'
     );
   });
 
@@ -108,7 +108,7 @@ describe('Photon client', () => {
       label: '37.50000, 127.10000', lat: 37.5, lng: 127.1
     });
     expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://photon.komoot.io/reverse?lat=37.5&lon=127.1'
+      'https://photon.komoot.io/reverse?lat=37.5&lon=127.1&lang=default'
     );
   });
 
