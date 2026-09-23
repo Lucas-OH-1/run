@@ -1,7 +1,13 @@
+import L from 'leaflet';
 import { describe, expect, it } from 'vitest';
 import { createRouteMap, routeStyle } from '../src/map/create-map.js';
 
 describe('routeStyle', () => {
+  it('Leaflet 마커 이미지 asset을 명시적으로 설정한다', () => {
+    expect(L.Icon.Default.prototype.options.iconUrl).not.toBe('marker-icon.png');
+    expect(L.Icon.Default.prototype.options.shadowUrl).not.toBe('marker-shadow.png');
+  });
+
   it('선택 경로를 굵고 불투명하게 만들고 기본 선택값은 A로 둔다', () => {
     expect(routeStyle('A')).toMatchObject({ color: '#087f5b', weight: 8, opacity: 1 });
     expect(routeStyle('B')).toMatchObject({ weight: 4, opacity: 0.28 });
