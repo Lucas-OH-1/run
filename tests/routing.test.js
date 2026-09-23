@@ -177,6 +177,26 @@ describe('routing client', () => {
     expect(routeUrls.slice(1).every(url => url.searchParams.get('lonlats') === '127.12,37.44|127.14,37.48')).toBe(true);
   });
 
+  it('각 경로가 완료될 때 진행률 콜백을 호출한다', async () => {
+    let profileUploads = 0;
+    const fetchImpl = vi.fn((input, options) => {
+      if (options?.method === 'POST') {
+        return Promise.resolve(profileResponse(`profile_${profileUploads++}`));
+      }
+      return Promise.resolve(routeResponse());
+    });
+    const progress = vi.fn();
+    const client = createRoutingClient({ fetchImpl });
+    await client.getRoutes(start, end, {
+      corridor: { waypoints: [{ lat: 37.45, lng: 127.12 }, { lat: 37.47, lng: 127.13 }] },
+      onProgress: progress
+    });
+
+    expect(progress).toHaveBeenCalledTimes(4);
+    expect(progress.mock.calls.map(([event]) => event.total)).toEqual([4, 4, 4, 4]);
+    expect(progress.mock.calls.at(-1)[0].completed).toBe(4);
+  });
+
   it('같은 만료 프로필의 동시 실패에는 모드별 재등록을 한 번만 수행한다', async () => {
     let profileUploads = 0;
     const fetchImpl = vi.fn((input, options) => {

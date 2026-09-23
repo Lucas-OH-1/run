@@ -3,7 +3,7 @@ import { createApp } from '../src/app.js';
 
 describe('route search flow', () => {
   beforeEach(() => {
-    document.body.innerHTML = `<form id="route-form"><input id="start-input"><input id="end-input"><button type="submit">검색</button></form><button id="use-location"></button><button id="pick-start"></button><button id="pick-end"></button><button id="fit-routes"></button><button id="retry" hidden></button><p id="status"></p><section id="route-list"></section><ul id="start-results"></ul><ul id="end-results"></ul>`;
+    document.body.innerHTML = `<form id="route-form"><input id="start-input"><input id="end-input"><button type="submit">검색</button></form><button id="use-location"></button><button id="pick-start"></button><button id="pick-end"></button><button id="fit-routes"></button><button id="retry" hidden></button><div id="route-progress" hidden><progress id="route-progress-bar" max="100" value="0"></progress><span id="route-progress-label"></span></div><p id="status"></p><section id="route-list"></section><ul id="start-results"></ul><ul id="end-results"></ul>`;
   });
 
   it('두 지점이 있으면 세 경로를 지도와 카드에 표시한다', async () => {
@@ -33,11 +33,46 @@ describe('route search flow', () => {
 
     await vi.waitFor(() => expect(document.querySelectorAll('[data-route-mode]')).toHaveLength(4));
     expect(corridor.findTancheonCorridor).toHaveBeenCalledOnce();
-    expect(routing.getRoutes).toHaveBeenCalledWith(expect.anything(), expect.anything(), { corridor: corridorResult });
+    expect(routing.getRoutes).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      corridor: corridorResult,
+      onProgress: expect.any(Function)
+    });
     expect(document.querySelector('#route-list').textContent).toContain('탄천자전거도로 필수');
     expect(document.querySelector('#route-list').textContent).toContain('자동차 없는 길');
     expect(document.querySelector('#route-list').textContent).toContain('최단거리');
     expect(document.querySelector('#route-list').textContent).toContain('반반 혼합');
+    app.destroy();
+  });
+
+  it('탄천 조회와 경로 완료 단계에 맞춰 진행률을 표시한다', async () => {
+    let resolveCorridor;
+    let reportProgress;
+    let resolveRoutes;
+    const corridor = { findTancheonCorridor: vi.fn(() => new Promise(resolve => { resolveCorridor = resolve; })) };
+    const routing = { getRoutes: vi.fn((start, end, options) => {
+      reportProgress = options.onProgress;
+      return new Promise(resolve => { resolveRoutes = resolve; });
+    }) };
+    const app = createApp({ document, corridor, routing, geocoding: {}, navigator: {} });
+    app.setPoint('start', { label: '출발', lat: 37.4, lng: 127.1 });
+    app.setPoint('end', { label: '도착', lat: 37.5, lng: 127.2 });
+
+    document.querySelector('#route-form').requestSubmit();
+    expect(document.querySelector('#route-progress').hidden).toBe(false);
+    expect(document.querySelector('#route-progress-bar').value).toBe(5);
+
+    const corridorResult = { waypoints: [{ lat: 37.41, lng: 127.11 }, { lat: 37.49, lng: 127.14 }] };
+    resolveCorridor(corridorResult);
+    await vi.waitFor(() => expect(routing.getRoutes).toHaveBeenCalledOnce());
+    expect(document.querySelector('#route-progress-bar').value).toBe(30);
+
+    reportProgress({ mode: 'RIVER', completed: 1, total: 4 });
+    expect(document.querySelector('#route-progress-bar').value).toBe(43);
+    expect(document.querySelector('#route-progress-label').textContent).toContain('탄천자전거도로 필수 계산 완료');
+
+    const feature = { properties: { 'track-length': '1000', messages: [] }, geometry: { type: 'LineString', coordinates: [] } };
+    resolveRoutes(['RIVER', 'SAFE', 'SHORT', 'MIXED'].map(mode => ({ mode, feature })));
+    await vi.waitFor(() => expect(document.querySelector('#route-progress-bar').value).toBe(100));
     app.destroy();
   });
 

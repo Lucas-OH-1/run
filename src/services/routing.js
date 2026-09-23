@@ -157,16 +157,21 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
   }
 
   return {
-    getRoutes(start, end, { corridor } = {}) {
+    getRoutes(start, end, { corridor, onProgress } = {}) {
       const riverWaypoints = corridor?.waypoints;
       const hasCorridor = Array.isArray(riverWaypoints) && riverWaypoints.length >= 2;
       const modes = hasCorridor ? ROUTE_MODE_IDS : ['A', 'B', 'C'];
+      let completed = 0;
       return Promise.all(modes.map(mode => requestRoute(
         mode,
         start,
         end,
         mode === 'RIVER' ? riverWaypoints : []
-      )));
+      ).then(route => {
+        completed += 1;
+        onProgress?.({ mode, completed, total: modes.length });
+        return route;
+      })));
     }
   };
 }

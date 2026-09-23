@@ -47,12 +47,19 @@ const query = `[out:json][timeout:20];
 out geom;`;
 ```
 
-- [ ] Normalize returned `elements[].geometry` into `[ { lat, lng }, ... ]`, remove duplicate adjacent points, discard ways with fewer than two valid points, prefer ways whose `tags.name` contains `탄천`, and order valid geometry along the start-to-end direction.
-- [ ] Select an ordered corridor with the nearest point to start, the nearest point to end, and intermediate geometry points at no more than 1.5km spacing. Reject the corridor when no valid geometry or when the nearest start/end distances exceed 5km.
+- [ ] Normalize returned `elements[].nodes` and `elements[].geometry` into node IDs and coordinates, remove invalid ways, and mark nodes belonging to ways whose `tags.name` contains `탄천`.
+- [ ] Build an undirected graph from consecutive OSM node pairs, find connected components containing Tancheon nodes, and run Dijkstra over one component. Select an exit node near the destination with a maximum 3km access distance so the corridor does not terminate prematurely or loop through an unrelated branch.
+- [ ] Sample the resulting continuous graph path at no more than 1.5km spacing. Reject the corridor when no connected path exists or when the entry distance exceeds 5km.
 - [ ] Convert Overpass/network/empty results to `탄천자전거도로를 찾지 못했습니다. 지도에서 직접 지점을 선택해주세요.`.
 - [ ] Test exact query parameters through injected `fetchImpl` and verify nearest/ordered waypoints.
 
-### Task 2: Profiles and routing client
+### Task 2: Progress reporting
+
+- [ ] Add an accessible progress element with a numeric value and Korean stage label.
+- [ ] Report 5% before corridor lookup, 25% after corridor selection, 30% before BRouter requests, and 25–95% as each of the four routes completes. Show 100% after cards render and retain an error state with retry when a service fails.
+- [ ] Clear progress on point changes, retry, destroy, and successful completion after a short visible 100% state.
+
+### Task 3: Profiles and routing client
 
 - [ ] Write failing tests for `RIVER`, `SAFE`, `SHORT`, `MIXED` mode order, profile caching, and multi-waypoint URL encoding.
 - [ ] Define profile costs:
@@ -65,14 +72,14 @@ out geom;`;
 - [ ] Preserve profile ID caching, concurrent registration deduplication, HTTP re-registration retry, malformed GeoJSON validation, and friendly errors.
 - [ ] Add tests that assert RIVER includes every ordered corridor waypoint and other modes do not.
 
-### Task 3: Map and analysis contract
+### Task 4: Map and analysis contract
 
 - [ ] Write failing tests for all four route colors and selected/unselected style behavior.
 - [ ] Add four stable colors and use mode keys rather than A/B/C. Default selected mode is `RIVER`.
 - [ ] Retain marker cleanup and GeoJSON validation. `setRoutes` must accept only normalized four-mode route objects.
 - [ ] Keep distance, pedestrian percentage, road, steps, shared-cycleway, and structure statistics. Set `showPedestrianSideHint` when shared-cycleway distance is positive.
 
-### Task 4: App integration and UI
+### Task 5: App integration and UI
 
 - [ ] Write failing integration tests for four cards, RIVER corridor lookup before routing, failed corridor state, card selection, and stale async response protection.
 - [ ] Update `createApp` dependencies to `{ corridor, routing, geocoding }` while preserving optional dependency behavior in unit tests.
@@ -85,7 +92,7 @@ out geom;`;
 - [ ] Keep loading disable, retry, offline handling, address selection, map selection, stale request guards, and map cleanup.
 - [ ] Add a route legend/help text explaining that RIVER may detour to reach the corridor and other modes do not guarantee river access.
 
-### Task 5: Verification and deployment
+### Task 6: Verification and deployment
 
 - [ ] Run focused corridor/profile/routing tests and confirm failures occur before implementation.
 - [ ] Run `npm ci && npm test && npm run build`.

@@ -106,6 +106,9 @@ export function createApp({ document, map, routing, geocoding, corridor, navigat
   const retryButton = document.querySelector('#retry');
   const view = document.defaultView;
   const status = document.querySelector('#status');
+  const progressPanel = document.querySelector('#route-progress');
+  const progressBar = document.querySelector('#route-progress-bar');
+  const progressLabel = document.querySelector('#route-progress-label');
   const routeList = document.querySelector('#route-list');
   const startResults = document.querySelector('#start-results');
   const endResults = document.querySelector('#end-results');
@@ -147,9 +150,26 @@ export function createApp({ document, map, routing, geocoding, corridor, navigat
     }
   }
 
+  function setProgress(value, message, { error = false } = {}) {
+    if (!progressPanel || !progressBar || !progressLabel) {
+      return;
+    }
+    progressPanel.hidden = false;
+    progressBar.value = value;
+    progressBar.classList.toggle('error', error);
+    progressLabel.textContent = `${value}% · ${message}`;
+  }
+
+  function hideProgress() {
+    if (progressPanel) {
+      progressPanel.hidden = true;
+    }
+  }
+
   function invalidatePointSelection({ reverse = true } = {}) {
     routeGeneration += 1;
     setRouteLoading(false);
+    hideProgress();
     if (retryButton) {
       retryButton.hidden = true;
     }
@@ -261,14 +281,29 @@ export function createApp({ document, map, routing, geocoding, corridor, navigat
     const start = state.start;
     const end = state.end;
     setRouteLoading(true);
-    setText(status, '탄천과 보행로를 분석해 러닝 경로를 찾고 있습니다…');
+    setProgress(5, '탄천자전거도로 연결망을 확인하고 있습니다');
+    setText(status, '탄천자전거도로 연결망을 확인하고 있습니다…');
     try {
-      const riverCorridor = typeof corridor?.findTancheonCorridor === 'function'
+      const hasCorridorService = typeof corridor?.findTancheonCorridor === 'function';
+      const riverCorridor = hasCorridorService
         ? await corridor.findTancheonCorridor(start, end)
         : null;
-      const routes = typeof corridor?.findTancheonCorridor === 'function'
-        ? await routing?.getRoutes?.(start, end, { corridor: riverCorridor })
-        : await routing?.getRoutes?.(start, end);
+      if (hasCorridorService) {
+        setProgress(25, '탄천 진입·이탈 지점을 계산했습니다');
+      }
+      const onProgress = ({ mode, completed, total }) => {
+        if (destroyed || generation !== routeGeneration) {
+          return;
+        }
+        const value = 25 + Math.round((completed / total) * 70);
+        const title = MODE_TITLES[mode] ?? '경로';
+        setProgress(value, `${title} 계산 완료 (${completed}/${total})`);
+        setText(status, `${title}를 계산했습니다 (${completed}/${total})…`);
+      };
+      setProgress(30, '네 가지 경로를 계산하고 있습니다');
+      const routes = hasCorridorService
+        ? await routing?.getRoutes?.(start, end, { corridor: riverCorridor, onProgress })
+        : await routing?.getRoutes?.(start, end, { onProgress });
       if (
         destroyed ||
         generation !== routeGeneration ||
@@ -282,6 +317,7 @@ export function createApp({ document, map, routing, geocoding, corridor, navigat
         if (retryButton) {
           retryButton.hidden = false;
         }
+        setProgress(30, ROUTE_FAILURE_STATUS, { error: true });
         setText(status, ROUTE_FAILURE_STATUS);
         return;
       }
@@ -292,7 +328,15 @@ export function createApp({ document, map, routing, geocoding, corridor, navigat
       if (retryButton) {
         retryButton.hidden = true;
       }
+      setProgress(100, '경로 계산이 완료되었습니다');
       setText(status, `${MODE_TITLES[state.selectedMode] ?? '경로'}를 추천합니다.`);
+      const progressTimer = setTimeout(() => {
+        timers.delete(progressTimer);
+        if (!destroyed && generation === routeGeneration) {
+          hideProgress();
+        }
+      }, 700);
+      timers.add(progressTimer);
     } catch (error) {
       if (
         destroyed ||
@@ -307,6 +351,7 @@ export function createApp({ document, map, routing, geocoding, corridor, navigat
         retryButton.hidden = false;
       }
       const message = error instanceof Error ? error.message : ROUTE_FAILURE_STATUS;
+      setProgress(30, message, { error: true });
       setText(status, message.includes('다시 시도') ? message : `${message} 다시 시도해주세요.`);
     } finally {
       if (!destroyed && generation === routeGeneration) {

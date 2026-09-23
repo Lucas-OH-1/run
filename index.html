@@ -23,6 +23,10 @@
           </div>
           <button type="submit">러닝 경로 찾기</button>
         </form>
+        <div id="route-progress" class="route-progress" aria-live="polite" hidden>
+          <progress id="route-progress-bar" max="100" value="0"></progress>
+          <span id="route-progress-label">0% · 경로 계산을 준비하고 있습니다</span>
+        </div>
         <p id="status" aria-live="polite"></p>
         <button id="retry" type="button" hidden>다시 시도</button>
         <section id="route-list" aria-label="추천 경로"></section>
