@@ -1,4 +1,4 @@
-import { OVERPASS_URL } from '../config.js';
+import { OVERPASS_URLS } from '../config.js';
 
 const CORRIDOR_ERROR = '탄천자전거도로를 찾지 못했습니다. 지도에서 직접 지점을 선택해주세요.';
 const MAX_ENTRY_DISTANCE_M = 5000;
@@ -81,14 +81,18 @@ export async function findTancheonCorridor(start, end, fetchImpl = fetch) {
 
   try {
     let response;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      response = await fetchImpl(OVERPASS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=UTF-8'
-        },
-        body: queryFor(start)
-      });
+    for (const url of OVERPASS_URLS) {
+      try {
+        response = await fetchImpl(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=UTF-8'
+          },
+          body: queryFor(start)
+        });
+      } catch {
+        response = null;
+      }
       if (response?.ok) {
         break;
       }
