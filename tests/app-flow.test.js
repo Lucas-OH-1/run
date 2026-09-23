@@ -19,6 +19,28 @@ describe('route search flow', () => {
     expect(map.setRoutes.mock.calls[0][0].map(route => route.mode)).toEqual(['A', 'B', 'C']);
   });
 
+  it('탄천 corridor를 조회하고 네 가지 경로 카드를 표시한다', async () => {
+    const map = { setPoint: vi.fn(), setRoutes: vi.fn(), selectRoute: vi.fn() };
+    const feature = { properties: { 'track-length': '1000', messages: [] }, geometry: { type: 'LineString', coordinates: [] } };
+    const corridorResult = { waypoints: [{ lat: 37.41, lng: 127.11 }, { lat: 37.49, lng: 127.14 }] };
+    const corridor = { findTancheonCorridor: vi.fn().mockResolvedValue(corridorResult) };
+    const routing = { getRoutes: vi.fn().mockResolvedValue(['RIVER', 'SAFE', 'SHORT', 'MIXED'].map(mode => ({ mode, feature }))) };
+    const app = createApp({ document, map, routing, corridor, geocoding: {}, navigator: {} });
+    app.setPoint('start', { label: '출발', lat: 37.4, lng: 127.1 });
+    app.setPoint('end', { label: '도착', lat: 37.5, lng: 127.2 });
+
+    document.querySelector('#route-form').requestSubmit();
+
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-route-mode]')).toHaveLength(4));
+    expect(corridor.findTancheonCorridor).toHaveBeenCalledOnce();
+    expect(routing.getRoutes).toHaveBeenCalledWith(expect.anything(), expect.anything(), { corridor: corridorResult });
+    expect(document.querySelector('#route-list').textContent).toContain('탄천자전거도로 필수');
+    expect(document.querySelector('#route-list').textContent).toContain('자동차 없는 길');
+    expect(document.querySelector('#route-list').textContent).toContain('최단거리');
+    expect(document.querySelector('#route-list').textContent).toContain('반반 혼합');
+    app.destroy();
+  });
+
   it('두 지점 없이 제출하면 정확한 안내 문구를 표시한다', () => {
     createApp({ document, geocoding: {}, navigator: {} });
 

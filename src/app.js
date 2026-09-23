@@ -2,16 +2,25 @@ import { analyzeRoute } from './routing/analyze-route.js';
 
 const INITIAL_STATUS = '출발지와 도착지를 선택해주세요.';
 const MODE_TITLES = {
+  RIVER: '탄천자전거도로 필수',
+  SAFE: '자동차 없는 길',
+  SHORT: '최단거리',
+  MIXED: '반반 혼합',
   A: 'A 경로',
   B: 'B 경로',
   C: 'C 경로'
 };
 const MODE_DESCRIPTIONS = {
+  RIVER: '탄천 진입·이탈 지점을 경유합니다',
+  SAFE: '보행로·산책로 우선',
+  SHORT: '보행 가능한 최단거리',
+  MIXED: '안전성과 거리를 균형 있게 선택',
   A: '하천변 보행로 우선',
   B: '녹도·겸용도로 우선',
   C: '보행 최단거리'
 };
 const ROUTE_MODES = new Set(Object.keys(MODE_TITLES));
+const DISPLAY_ROUTE_MODES = ['RIVER', 'SAFE', 'SHORT', 'MIXED'];
 const ROUTE_FAILURE_STATUS = '경로를 찾지 못했습니다. 지점을 확인한 뒤 다시 시도해주세요.';
 const SEARCH_DELAY_MS = 350;
 
@@ -57,7 +66,7 @@ function routeMode(route) {
 
 function safeRouteMode(route, index) {
   const mode = routeMode(route);
-  const fallback = ['A', 'B', 'C'][index] ?? 'A';
+  const fallback = ['A', 'B', 'C'][index] ?? 'RIVER';
   return ROUTE_MODES.has(mode) ? mode : fallback;
 }
 
@@ -71,13 +80,13 @@ function normalizeRoutes(routes) {
   });
 }
 
-export function createApp({ document, map, routing, geocoding, navigator = window.navigator }) {
+export function createApp({ document, map, routing, geocoding, corridor, navigator = window.navigator }) {
   const state = {
     start: null,
     end: null,
     pickMode: null,
     routes: [],
-    selectedMode: 'A'
+    selectedMode: 'RIVER'
   };
   const timers = new Set();
   const listeners = [];
@@ -252,9 +261,14 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
     const start = state.start;
     const end = state.end;
     setRouteLoading(true);
-    setText(status, '보행로를 분석해 러닝 경로를 찾고 있습니다…');
+    setText(status, '탄천과 보행로를 분석해 러닝 경로를 찾고 있습니다…');
     try {
-      const routes = await routing?.getRoutes?.(start, end);
+      const riverCorridor = typeof corridor?.findTancheonCorridor === 'function'
+        ? await corridor.findTancheonCorridor(start, end)
+        : null;
+      const routes = typeof corridor?.findTancheonCorridor === 'function'
+        ? await routing?.getRoutes?.(start, end, { corridor: riverCorridor })
+        : await routing?.getRoutes?.(start, end);
       if (
         destroyed ||
         generation !== routeGeneration ||
@@ -278,7 +292,7 @@ export function createApp({ document, map, routing, geocoding, navigator = windo
       if (retryButton) {
         retryButton.hidden = true;
       }
-      setText(status, `${state.selectedMode} 경로를 추천합니다.`);
+      setText(status, `${MODE_TITLES[state.selectedMode] ?? '경로'}를 추천합니다.`);
     } catch (error) {
       if (
         destroyed ||

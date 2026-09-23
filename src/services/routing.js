@@ -1,5 +1,5 @@
 import { BROUTER_URL } from '../config.js';
-import { ROUTE_PROFILES } from '../routing/profiles.js';
+import { ROUTE_MODE_IDS, ROUTE_PROFILES } from '../routing/profiles.js';
 
 const SERVICE_ERROR = '러닝 경로 서비스를 사용할 수 없습니다.';
 const ROUTE_ERROR = '러닝 경로를 찾지 못했습니다. 지점을 조금 옮겨 다시 시도해주세요.';
@@ -83,22 +83,24 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
     return promise;
   }
 
-  function routeUrl(profile, start, end) {
+  function routeUrl(profile, start, end, viaPoints = []) {
+    const points = [start, ...viaPoints, end];
+    const lonlats = points.map(point => `${point.lng},${point.lat}`).join('|');
     const url = new URL(BROUTER_URL);
-    url.searchParams.set('lonlats', `${start.lng},${start.lat}|${end.lng},${end.lat}`);
+    url.searchParams.set('lonlats', lonlats);
     url.searchParams.set('profile', profile);
     url.searchParams.set('alternativeidx', '0');
     url.searchParams.set('format', 'geojson');
     return url;
   }
 
-  async function requestRoute(mode, start, end) {
+  async function requestRoute(mode, start, end, viaPoints = []) {
     let profile = await getProfile(mode);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let response;
       try {
-        response = await fetchImpl(routeUrl(profile, start, end));
+        response = await fetchImpl(routeUrl(profile, start, end, viaPoints));
       } catch {
         throw new Error(ROUTE_ERROR);
       }
@@ -155,8 +157,16 @@ export function createRoutingClient({ fetchImpl = fetch } = {}) {
   }
 
   return {
-    getRoutes(start, end) {
-      return Promise.all(['A', 'B', 'C'].map(mode => requestRoute(mode, start, end)));
+    getRoutes(start, end, { corridor } = {}) {
+      const riverWaypoints = corridor?.waypoints;
+      const hasCorridor = Array.isArray(riverWaypoints) && riverWaypoints.length >= 2;
+      const modes = hasCorridor ? ROUTE_MODE_IDS : ['A', 'B', 'C'];
+      return Promise.all(modes.map(mode => requestRoute(
+        mode,
+        start,
+        end,
+        mode === 'RIVER' ? riverWaypoints : []
+      )));
     }
   };
 }

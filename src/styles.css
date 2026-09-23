@@ -156,6 +156,13 @@ input:focus-visible {
   color: #46554b;
 }
 
+.route-help {
+  margin: 12px 0 0;
+  color: #46554b;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 .safety {
   margin-top: 16px;
   color: #5d675f;

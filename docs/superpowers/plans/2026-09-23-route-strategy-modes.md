@@ -47,8 +47,8 @@ const query = `[out:json][timeout:20];
 out geom;`;
 ```
 
-- [ ] Normalize returned `elements[].geometry` into `[ { lat, lng }, ... ]`, remove duplicate adjacent points, discard ways with fewer than two valid points, and sort connected ways by nearest endpoint.
-- [ ] Select an ordered corridor with the nearest point to start, the nearest point to end, and intermediate geometry points at no more than 500m spacing. Reject the corridor when no valid geometry or when the nearest start/end distances exceed 5km.
+- [ ] Normalize returned `elements[].geometry` into `[ { lat, lng }, ... ]`, remove duplicate adjacent points, discard ways with fewer than two valid points, prefer ways whose `tags.name` contains `탄천`, and order valid geometry along the start-to-end direction.
+- [ ] Select an ordered corridor with the nearest point to start, the nearest point to end, and intermediate geometry points at no more than 1.5km spacing. Reject the corridor when no valid geometry or when the nearest start/end distances exceed 5km.
 - [ ] Convert Overpass/network/empty results to `탄천자전거도로를 찾지 못했습니다. 지도에서 직접 지점을 선택해주세요.`.
 - [ ] Test exact query parameters through injected `fetchImpl` and verify nearest/ordered waypoints.
 

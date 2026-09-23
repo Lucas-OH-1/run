@@ -8,7 +8,12 @@ describe('routeStyle', () => {
     expect(L.Icon.Default.prototype.options.shadowUrl).not.toBe('marker-shadow.png');
   });
 
-  it('선택 경로를 굵고 불투명하게 만들고 기본 선택값은 A로 둔다', () => {
+  it('탄천 경로를 기본 선택하고 최단거리 경로를 점선으로 표시한다', () => {
+    expect(routeStyle('RIVER', 'RIVER')).toMatchObject({ color: '#087f5b', weight: 8, opacity: 1 });
+    expect(routeStyle('SHORT', 'RIVER')).toMatchObject({ weight: 4, opacity: 0.28, dashArray: '8 7' });
+  });
+
+  it('선택 경로를 굵고 불투명하게 만들고 레거시 기본 선택값은 A로 둔다', () => {
     expect(routeStyle('A')).toMatchObject({ color: '#087f5b', weight: 8, opacity: 1 });
     expect(routeStyle('B')).toMatchObject({ weight: 4, opacity: 0.28 });
     expect(routeStyle('A', 'A')).toMatchObject({ color: '#087f5b', weight: 8, opacity: 1 });

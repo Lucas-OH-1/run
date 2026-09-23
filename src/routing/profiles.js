@@ -40,20 +40,34 @@ function profile(costRules) {
   return `${global}\nassign costfactor\n  add accesspenalty\n  ${costRules}\n${node}`;
 }
 
+export const ROUTE_MODE_IDS = ['RIVER', 'SAFE', 'SHORT', 'MIXED'];
+
 export const ROUTE_PROFILES = {
-  A: profile(`if highway=footway|pedestrian then 1
-  else if highway=path then 1.1
-  else if highway=track then 1.5
-  else if highway=cycleway then 4
+  RIVER: profile(`if highway=footway|pedestrian|path then 1
+  else if highway=cycleway then 1.4
+  else if highway=track then 1.6
   else if highway=steps then 10000
-  else if highway=living_street then 5
-  else if highway=residential|service|unclassified then 8
-  else if highway=tertiary|tertiary_link then 20
-  else if highway=secondary|secondary_link then 40
-  else if highway=primary|primary_link|trunk|trunk_link then 80
+  else if highway=living_street then 6
+  else if highway=residential|service|unclassified then 10
+  else if highway=tertiary|tertiary_link then 25
+  else if highway=secondary|secondary_link then 50
+  else if highway=primary|primary_link|trunk|trunk_link then 100
   else if route=ferry then 100
-  else 10`),
-  B: profile(`if highway=footway|pedestrian|path then 1
+  else 12`),
+  SAFE: profile(`if highway=footway|pedestrian|path|track then 1
+  else if highway=cycleway then 1.3
+  else if highway=steps then 10000
+  else if highway=living_street then 7
+  else if highway=residential|service|unclassified then 12
+  else if highway=tertiary|tertiary_link then 30
+  else if highway=secondary|secondary_link then 60
+  else if highway=primary|primary_link|trunk|trunk_link then 120
+  else if route=ferry then 100
+  else 15`),
+  SHORT: profile(`if highway=motorway|motorway_link|proposed|abandoned|construction then 100000
+  else if route=ferry then 5.67
+  else 1`),
+  MIXED: profile(`if highway=footway|pedestrian|path then 1
   else if highway=cycleway then 1.2
   else if highway=track then 1.4
   else if highway=steps then 3
@@ -63,6 +77,17 @@ export const ROUTE_PROFILES = {
   else if highway=secondary|secondary_link then 25
   else if highway=primary|primary_link|trunk|trunk_link then 50
   else if route=ferry then 100
+  else 8`),
+  A: profile(`if highway=footway|pedestrian then 1
+  else if highway=path then 1.1
+  else if highway=track then 1.5
+  else if highway=cycleway then 4
+  else if highway=steps then 10000
+  else 10`),
+  B: profile(`if highway=footway|pedestrian|path then 1
+  else if highway=cycleway then 1.2
+  else if highway=track then 1.4
+  else if highway=steps then 3
   else 8`),
   C: profile(`if highway=motorway|motorway_link|proposed|abandoned|construction then 100000
   else if route=ferry then 5.67

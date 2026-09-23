@@ -14,7 +14,7 @@ export function routeStyle(mode, selected = 'A') {
     color: ROUTE_COLORS[mode],
     weight: mode === selected ? 8 : 4,
     opacity: mode === selected ? 1 : 0.28,
-    dashArray: mode === 'C' ? '8 7' : null
+    dashArray: mode === 'SHORT' || mode === 'C' ? '8 7' : null
   };
 }
 

@@ -158,6 +158,25 @@ describe('routing client', () => {
     expect(routeRequestCount(fetchImpl)).toBe(3);
   });
 
+  it('탄천 corridor가 있으면 네 모드를 반환하고 RIVER에만 경유점을 넣는다', async () => {
+    let profileUploads = 0;
+    const fetchImpl = vi.fn((input, options) => {
+      if (options?.method === 'POST') {
+        return Promise.resolve(profileResponse(`profile_${profileUploads++}`));
+      }
+      return Promise.resolve(routeResponse());
+    });
+    const client = createRoutingClient({ fetchImpl });
+    const corridor = { waypoints: [{ lat: 37.45, lng: 127.12 }, { lat: 37.47, lng: 127.13 }] };
+
+    const routes = await client.getRoutes(start, end, { corridor });
+
+    expect(routes.map(route => route.mode)).toEqual(['RIVER', 'SAFE', 'SHORT', 'MIXED']);
+    const routeUrls = fetchImpl.mock.calls.filter(call => !isProfileUpload(call)).map(call => new URL(call[0]));
+    expect(routeUrls[0].searchParams.get('lonlats')).toBe('127.12,37.44|127.12,37.45|127.13,37.47|127.14,37.48');
+    expect(routeUrls.slice(1).every(url => url.searchParams.get('lonlats') === '127.12,37.44|127.14,37.48')).toBe(true);
+  });
+
   it('같은 만료 프로필의 동시 실패에는 모드별 재등록을 한 번만 수행한다', async () => {
     let profileUploads = 0;
     const fetchImpl = vi.fn((input, options) => {
